@@ -5,6 +5,8 @@ import socket
 import threading
 import random
 import string
+import ipaddress
+import concurrent.futures
 
 pygame.init()
 win = pygame.display.set_mode((318, 529))
@@ -41,28 +43,60 @@ conn = None
 addr = None
 random_text = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
-def try_connect():
-    global conn, connected, is_host
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(2)
+def get_local_network():
     try:
-        s.connect(("127.0.0.1", PORT))
-        conn = s
-        connected = True
-        is_host = False
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        network = ipaddress.ip_network(f"{local_ip}/24", strict=False)
+        return network
+    except Exception as e:
+        print(f"Error determining network: {e}")
+        return None
+
+def try_connect_to_ip(ip):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(1)
+    try:
+        s.connect((str(ip), PORT))
+        return s, ip
     except:
         s.close()
+        return None, ip
+
+def scan_network():
+    global conn, connected, is_host
+    network = get_local_network()
+    if not network:
         start_server()
+        return
+    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+        future_to_ip = {executor.submit(try_connect_to_ip, ip): ip for ip in network.hosts()}
+        for future in concurrent.futures.as_completed(future_to_ip):
+            result, ip = future.result()
+            if result:
+                conn = result
+                connected = True
+                is_host = False
+                print(f"Connected to {ip}")
+                return
+    start_server()
 
 def start_server():
     global conn, addr, connected, is_host
     is_host = True
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind((HOST, PORT))
-    s.listen(1)
-    conn, addr = s.accept()
-    connected = True
+    try:
+        s.bind((HOST, PORT))
+        s.listen(1)
+        conn, addr = s.accept()
+        connected = True
+        print(f"Server started, connected to {addr}")
+    except Exception as e:
+        print(f"Server error: {e}")
+        s.close()
 
 def battle_search():
     clock = pygame.time.Clock()
@@ -71,7 +105,7 @@ def battle_search():
     text = font.render("searching for battle", True, (0, 0, 0))
     text_rect = text.get_rect(center=(318 // 2, 529 // 2))
     running = True
-    threading.Thread(target=try_connect, daemon=True).start()
+    threading.Thread(target=scan_network, daemon=True).start()
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
