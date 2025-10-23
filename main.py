@@ -7,6 +7,7 @@ import random
 import string
 import ipaddress
 import concurrent.futures
+import os
 
 pygame.init()
 win = pygame.display.set_mode((318, 529))
@@ -22,8 +23,10 @@ swords = pygame.transform.scale(pygame.image.load("swords.png"), (75, 75))
 battle = pygame.transform.scale(pygame.image.load("battle.png"), (180, 80))
 mag = pygame.image.load("movingimage.png")
 cancel = pygame.image.load("cancel.png")
+placeholder = pygame.transform.scale(pygame.image.load("main/cards/placeholder.png"), (60, 70))
 pygame.font.init()
 font = pygame.font.SysFont("arial", 30)
+small_font = pygame.font.SysFont("arial", 16)
 
 win.fill((255, 255, 255))
 win.blit(logo, (0, 0))
@@ -35,13 +38,13 @@ for img in [tenpercent, fivepercent, sevenpercent, onepercent]:
     pygame.display.update()
     time.sleep(0.2)
 
-HOST = ""
+HOST = "0.0.0.0"
 PORT = 6767
 connected = False
 is_host = False
 conn = None
 addr = None
-random_text = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+game_id = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
 def get_local_network():
     try:
@@ -57,26 +60,27 @@ def get_local_network():
         return None
 
 def try_connect_to_ip(ip):
+    global game_id
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(0.5)
+    s.settimeout(2)
     try:
         s.connect((str(ip), PORT))
-        s.sendall(b"HELLO")  # Send test message to verify connection
-        response = s.recv(1024)  # Expect a response
-        if response:
-            print(f"Valid connection to {ip}")
+        s.sendall(b"HELLO")
+        response = s.recv(1024)
+        if response.startswith(b"HELLO:"):
+            game_id = response.decode().split(":")[1]
+            print(f"Valid connection to {ip}, Game ID: {game_id}")
             return s, ip
         else:
-            print(f"No response from {ip}")
+            print(f"Invalid response from {ip}")
             s.close()
             return None, ip
     except Exception as e:
-        print(f"Failed to connect to {ip}: {e}")
         s.close()
         return None, ip
 
 def scan_network():
-    global conn, connected, is_host
+    global conn, connected, is_host, addr
     network = get_local_network()
     if not network:
         print("No network found, starting server")
@@ -102,13 +106,18 @@ def start_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        s.bind((HOST, PORT))
+        s.bind(("0.0.0.0", PORT))
         s.listen(1)
         print(f"Server listening on port {PORT}")
         conn, addr = s.accept()
-        conn.sendall(b"HELLO")  # Respond to client
-        connected = True
-        print(f"Server connected to {addr}")
+        hello_msg = conn.recv(1024)
+        if hello_msg == b"HELLO":
+            conn.sendall(f"HELLO:{game_id}".encode())
+            connected = True
+            print(f"Server connected to {addr}, Game ID: {game_id}")
+        else:
+            print("Invalid handshake")
+            conn.close()
     except Exception as e:
         print(f"Server error: {e}")
         s.close()
@@ -137,7 +146,7 @@ def battle_search():
         win.blit(cancel, (10, 10))
         pygame.display.update()
         if connected:
-            show_connected_screen()
+            game_screen()
             return
         clock.tick(60)
         if pygame.mouse.get_pressed()[0]:
@@ -147,19 +156,29 @@ def battle_search():
                 running = False
                 pygame.display.update()
 
-def show_connected_screen():
-    win.fill((255, 255, 255))
-    role = "0" if is_host else "1"
-    role_text = font.render(role, True, (0, 0, 0))
-    txt = font.render(random_text, True, (0, 0, 0))
-    win.blit(role_text, (150, 200))
-    win.blit(txt, (100, 250))
-    pygame.display.update()
+def game_screen():
+    clock = pygame.time.Clock()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
+        
+        win.fill((255, 255, 255))
+        
+        game_id_text = small_font.render(f"Game ID: {game_id}", True, (0, 0, 0))
+        win.blit(game_id_text, (318 - game_id_text.get_width() - 10, 10))
+        
+        pygame.draw.rect(win, (128, 128, 128), (0, 445, 318, 84))
+        pygame.draw.rect(win, (0, 0, 0), (0, 445, 318, 84), 4)
+        
+        card_positions = [20, 83, 146, 209, 272]
+        for i, x_pos in enumerate(card_positions):
+            pygame.draw.rect(win, (0, 0, 0), (x_pos, 450, 60, 70), 3)
+            win.blit(placeholder, (x_pos, 450))
+        
+        pygame.display.update()
+        clock.tick(60)
 
 def main():
     clock = pygame.time.Clock()
