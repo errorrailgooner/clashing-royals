@@ -50,6 +50,7 @@ def get_local_network():
         local_ip = s.getsockname()[0]
         s.close()
         network = ipaddress.ip_network(f"{local_ip}/24", strict=False)
+        print(f"Scanning network: {network}")
         return network
     except Exception as e:
         print(f"Error determining network: {e}")
@@ -57,11 +58,20 @@ def get_local_network():
 
 def try_connect_to_ip(ip):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(1)
+    s.settimeout(0.5)
     try:
         s.connect((str(ip), PORT))
-        return s, ip
-    except:
+        s.sendall(b"HELLO")  # Send test message to verify connection
+        response = s.recv(1024)  # Expect a response
+        if response:
+            print(f"Valid connection to {ip}")
+            return s, ip
+        else:
+            print(f"No response from {ip}")
+            s.close()
+            return None, ip
+    except Exception as e:
+        print(f"Failed to connect to {ip}: {e}")
         s.close()
         return None, ip
 
@@ -69,6 +79,7 @@ def scan_network():
     global conn, connected, is_host
     network = get_local_network()
     if not network:
+        print("No network found, starting server")
         start_server()
         return
     with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
@@ -79,8 +90,10 @@ def scan_network():
                 conn = result
                 connected = True
                 is_host = False
-                print(f"Connected to {ip}")
+                addr = (str(ip), PORT)
+                print(f"Successfully connected to {ip}")
                 return
+    print("No valid connections found, starting server")
     start_server()
 
 def start_server():
@@ -91,9 +104,11 @@ def start_server():
     try:
         s.bind((HOST, PORT))
         s.listen(1)
+        print(f"Server listening on port {PORT}")
         conn, addr = s.accept()
+        conn.sendall(b"HELLO")  # Respond to client
         connected = True
-        print(f"Server started, connected to {addr}")
+        print(f"Server connected to {addr}")
     except Exception as e:
         print(f"Server error: {e}")
         s.close()
