@@ -23,7 +23,7 @@ swords = pygame.transform.scale(pygame.image.load("swords.png"), (75, 75))
 battle = pygame.transform.scale(pygame.image.load("battle.png"), (180, 80))
 mag = pygame.image.load("movingimage.png")
 cancel = pygame.image.load("cancel.png")
-placeholder = pygame.transform.scale(pygame.image.load("main/cards/placeholder.png"), (60, 70))
+placeholder = pygame.transform.scale(pygame.image.load("cards/placeholder.png"), (60, 70))
 pygame.font.init()
 font = pygame.font.SysFont("arial", 30)
 small_font = pygame.font.SysFont("arial", 16)
@@ -206,3 +206,4 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit()
             exit()
+
