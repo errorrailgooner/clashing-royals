@@ -24,9 +24,12 @@ battle = pygame.transform.scale(pygame.image.load("battle.png"), (180, 80))
 mag = pygame.image.load("movingimage.png")
 cancel = pygame.image.load("cancel.png")
 placeholder = pygame.transform.scale(pygame.image.load("cards/placeholder.png"), (60, 70))
+placeholder_mini = pygame.transform.scale(pygame.image.load("cards/placeholder.png"), (30, 35))
+placeholder_expanded = pygame.transform.scale(pygame.image.load("cards/placeholder.png"), (120, 140))
 pygame.font.init()
 font = pygame.font.SysFont("arial", 30)
 small_font = pygame.font.SysFont("arial", 16)
+tiny_font = pygame.font.SysFont("arial", 12)
 
 win.fill((255, 255, 255))
 win.blit(logo, (0, 0))
@@ -158,11 +161,50 @@ def battle_search():
 
 def game_screen():
     clock = pygame.time.Clock()
+    card_positions = [20, 83, 146, 209]
+    card_slots = [{'x': pos, 'y': 450, 'offset_x': 0, 'offset_y': 0} for pos in card_positions]
+    dragging_card = None
+    expanded_card = None
+    card_animating = False
+    animation_progress = 0
+    
     while True:
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_pressed = pygame.mouse.get_pressed()[0]
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
+            
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if expanded_card is None and not card_animating:
+                    for i, slot in enumerate(card_slots):
+                        card_rect = pygame.Rect(slot['x'], slot['y'], 60, 70)
+                        if card_rect.collidepoint(mouse_pos):
+                            dragging_card = i
+                            slot['offset_x'] = mouse_pos[0] - slot['x']
+                            slot['offset_y'] = mouse_pos[1] - slot['y']
+                            break
+            
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                if dragging_card is not None:
+                    slot = card_slots[dragging_card]
+                    current_x = mouse_pos[0] - slot['offset_x']
+                    current_y = mouse_pos[1] - slot['offset_y']
+                    
+                    if current_y < 445:
+                        expanded_card = dragging_card
+                    
+                    slot['offset_x'] = 0
+                    slot['offset_y'] = 0
+                    dragging_card = None
+        
+        if expanded_card is not None and not card_animating:
+            if mouse_pressed and mouse_pos[1] < 445:
+                card_animating = True
+                animation_progress = 0
+                expanded_card = None
         
         win.fill((255, 255, 255))
         
@@ -172,10 +214,42 @@ def game_screen():
         pygame.draw.rect(win, (128, 128, 128), (0, 445, 318, 84))
         pygame.draw.rect(win, (0, 0, 0), (0, 445, 318, 84), 4)
         
-        card_positions = [20, 83, 146, 209, 272]
-        for i, x_pos in enumerate(card_positions):
-            pygame.draw.rect(win, (0, 0, 0), (x_pos, 450, 60, 70), 3)
-            win.blit(placeholder, (x_pos, 450))
+        up_next_text = tiny_font.render("up next:", True, (0, 0, 0))
+        win.blit(up_next_text, (272, 448))
+        pygame.draw.rect(win, (0, 0, 0), (275, 465, 30, 35), 2)
+        win.blit(placeholder_mini, (275, 465))
+        
+        if card_animating:
+            animation_progress += 0.1
+            if animation_progress >= 1:
+                card_animating = False
+                animation_progress = 0
+        
+        for i, slot in enumerate(card_slots):
+            if card_animating and i < len(card_slots):
+                if i < 3:
+                    slide_offset = (card_positions[i + 1] - card_positions[i]) * animation_progress
+                    draw_x = card_positions[i] + slide_offset
+                else:
+                    slide_offset = 63 * animation_progress
+                    draw_x = card_positions[i] + slide_offset
+                draw_y = 450
+            elif dragging_card == i:
+                draw_x = mouse_pos[0] - slot['offset_x']
+                draw_y = mouse_pos[1] - slot['offset_y']
+            else:
+                draw_x = slot['x']
+                draw_y = slot['y']
+            
+            if expanded_card == i:
+                exp_x = 318 // 2 - 60
+                exp_y = 529 // 2 - 100
+                win.blit(placeholder_expanded, (exp_x, exp_y))
+                pygame.draw.rect(win, (0, 0, 0), (exp_x, exp_y, 120, 140), 3)
+            else:
+                if not card_animating or i < len(card_slots):
+                    pygame.draw.rect(win, (0, 0, 0), (int(draw_x), int(draw_y), 60, 70), 3)
+                    win.blit(placeholder, (int(draw_x), int(draw_y)))
         
         pygame.display.update()
         clock.tick(60)
@@ -206,4 +280,3 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit()
             exit()
-
